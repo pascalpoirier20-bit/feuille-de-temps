@@ -312,7 +312,7 @@ function parseTime(s) {
 const defaultState = () => ({
   version: 1,
   departments: [
-    { id: 'medecine', name: 'Médecine' },
+    { id: 'medecine', name: 'Médecine', defaultMin: 300 },
     { id: 'charpenterie', name: 'Charpenterie' },
     { id: 'esthetique', name: 'Esthétique' },
   ],
@@ -353,6 +353,26 @@ function deptHasData(id, dates) {
   return (dates || Object.keys(state.entries)).some(dt => getE(dt, id));
 }
 const visibleDepts = dates => state.departments.filter(d => !d.archived || deptHasData(d.id, dates));
+
+// Pré-remplit les départements ayant une durée par défaut (Médecine : 5 h), du lundi au vendredi,
+// pour chaque jour arrivé depuis la dernière ouverture. Un jour déjà traité n'est jamais re-rempli,
+// donc une valeur effacée ou modifiée reste comme la personne l'a laissée.
+function autoFill() {
+  const med = state.departments.find(d => d.id === 'medecine');
+  if (med && med.defaultMin === undefined) med.defaultMin = 300;
+  const depts = state.departments.filter(d => d.defaultMin && !d.archived);
+  const today = ymd(new Date());
+  if (state.autoFilledUntil >= today) return;
+  const from = state.autoFilledUntil ? addDays(parseYmd(state.autoFilledUntil), 1) : mondayOf(new Date());
+  for (let d = from; ymd(d) <= today; d = addDays(d, 1)) {
+    if (dow(d) > 4) continue;
+    const day = ymd(d);
+    for (const dp of depts)
+      if (!getE(day, dp.id)) (state.entries[day] ||= {})[dp.id] = { min: dp.defaultMin, note: '' };
+  }
+  state.autoFilledUntil = today;
+  persist();
+}
 
 function persist() {
   state.savedAt = new Date().toISOString();
@@ -788,7 +808,13 @@ $('#export-csv').onclick = () => {
 // Demande au navigateur de ne pas effacer les données de cette page.
 navigator.storage?.persist?.().catch(() => {});
 
+autoFill();
 render();
+// Si l'app reste ouverte d'un jour à l'autre, pré-remplir le nouveau jour au retour.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden || state.autoFilledUntil >= ymd(new Date())) return;
+  autoFill(); render();
+});
 if (!store.get('guide-vu')) $('#welcome').showModal();
 </script>
 </body>
