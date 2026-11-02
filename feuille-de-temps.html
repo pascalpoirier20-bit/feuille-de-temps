@@ -1,0 +1,795 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2f6fde">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Heures">
+<title>Feuille de temps</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --surface: #fff; --text: #1d2330; --muted: #6b7280; --line: #e2e5ea;
+    --accent: #2f6fde; --accent-soft: #e7effc; --we: #f0f1f4; --we-text: #9aa1ad;
+    --ok: #15803d; --warn: #b45309; --bad: #dc2626; --note: #e0a100;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14171c; --surface: #1c2027; --text: #e6e8ec; --muted: #9aa1ad; --line: #2c323c;
+      --accent: #6b9cf5; --accent-soft: #233149; --we: #181b21; --we-text: #6b7280;
+      --ok: #4ade80; --warn: #fbbf24; --bad: #f87171; --note: #fbbf24;
+    }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.4 system-ui, "Segoe UI", sans-serif; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  td, tfoot th { font-variant-numeric: tabular-nums; }
+
+  header { display: flex; align-items: center; gap: 10px; padding: 10px 20px; padding-top: max(10px, env(safe-area-inset-top)); background: var(--surface); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .brand { font-weight: 650; font-size: 17px; margin-right: 8px; }
+  .tabs { display: flex; background: var(--bg); border-radius: 8px; padding: 3px; }
+  .tabs button { border: 0; background: none; padding: 5px 14px; border-radius: 6px; color: var(--muted); }
+  .tabs button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px #0002; font-weight: 600; }
+  .spacer { flex: 1; }
+  .status { border: 1px solid var(--line); background: var(--bg); border-radius: 999px; padding: 4px 12px; font-size: 13px; white-space: nowrap; }
+  .status.ok { color: var(--ok); }
+  .status.warn { color: var(--warn); border-color: currentColor; }
+  .help-btn { width: 30px; height: 30px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg); font-weight: 600; }
+  .help-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .menu { position: relative; }
+  .menu summary { list-style: none; cursor: pointer; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); }
+  .menu summary::-webkit-details-marker { display: none; }
+  .menu > div { position: absolute; right: 0; top: calc(100% + 6px); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 20px #0003; padding: 6px; z-index: 10; min-width: 250px; display: flex; flex-direction: column; }
+  .menu > div button { text-align: left; border: 0; background: none; padding: 10px; border-radius: 6px; }
+  .menu > div button:hover { background: var(--accent-soft); }
+
+  main { padding: 20px; max-width: 1200px; margin: 0 auto; }
+  .period { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+  .period h2 { margin: 0 8px; font-size: 18px; font-weight: 600; min-width: 280px; text-align: center; }
+  .period h2 small { display: block; font-size: 13px; color: var(--muted); font-weight: 400; }
+  .btn { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 5px 12px; }
+  .btn:hover { border-color: var(--accent); }
+
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 20px; align-items: start; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; }
+
+  /* ----- Grille (ordinateur) ----- */
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border-bottom: 1px solid var(--line); padding: 0; text-align: center; }
+  thead th { font-size: 13px; font-weight: 600; padding: 8px 4px; color: var(--muted); }
+  thead th span { display: block; font-size: 16px; color: var(--text); }
+  thead th.today span { background: var(--accent); color: #fff; border-radius: 999px; width: 28px; margin: 0 auto; }
+  th.dept, th.dept-h { text-align: left; padding: 0 12px; min-width: 150px; }
+  th.dept { font-weight: 500; height: 44px; position: relative; white-space: nowrap; padding-right: 56px; }
+  th.dept .acts { visibility: hidden; position: absolute; right: 6px; top: 50%; transform: translateY(-50%); }
+  tr:hover th.dept .acts { visibility: visible; }
+  .acts button { border: 0; background: none; color: var(--muted); padding: 2px 5px; border-radius: 4px; }
+  .acts button:hover { background: var(--accent-soft); color: var(--text); }
+  tr.archived th.dept .name, .dcard.archived .dname { color: var(--muted); font-style: italic; }
+  .we { background: var(--we); }
+  thead th.we, thead th.we span { color: var(--we-text); }
+  td { position: relative; min-width: 72px; }
+  td.we { min-width: 56px; }
+  td.has-note::after, .dcard.has-note .dhead::after { content: ""; position: absolute; top: 0; right: 0; border: 6px solid transparent; border-top-color: var(--note); border-right-color: var(--note); pointer-events: none; }
+  input.cell { width: 100%; height: 44px; border: 0; background: transparent; text-align: center; font: inherit; font-variant-numeric: tabular-nums; color: var(--text); outline: none; cursor: pointer; transition: background .12s, box-shadow .12s; }
+  td.we input.cell { color: var(--we-text); }
+  input.cell::placeholder { color: var(--line); }
+  input.cell:hover:not(:focus) { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+  input.cell:hover:not(:focus)::placeholder { color: var(--accent); }
+  input.cell:focus { background: var(--accent-soft); box-shadow: inset 0 0 0 2px var(--accent); color: var(--text); cursor: text; }
+  input.cell.bad { box-shadow: inset 0 0 0 2px var(--bad); }
+  .tot { font-weight: 600; min-width: 72px; background: var(--bg); }
+  tfoot th, tfoot td { font-weight: 600; height: 42px; border-bottom: 0; }
+  tfoot th { text-align: left; padding: 0 12px; }
+  .grand { color: var(--accent); }
+  tfoot .grand { font-size: 16px; }
+  .below { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; font-size: 14px; color: var(--muted); gap: 12px; flex-wrap: wrap; }
+  .below b { color: var(--text); }
+  .link { border: 0; background: none; color: var(--accent); padding: 6px 0; }
+
+  aside { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; position: sticky; top: 20px; }
+  aside h3 { margin: 0 0 2px; font-size: 16px; }
+  aside .sub { color: var(--muted); font-size: 13px; margin-bottom: 14px; }
+  .stepper { display: flex; align-items: center; gap: 4px; margin-bottom: 14px; }
+  .stepper output { flex: 1; text-align: center; font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .stepper button { border: 1px solid var(--line); background: var(--bg); border-radius: 6px; padding: 5px 7px; font-size: 13px; }
+  aside label { font-size: 13px; color: var(--muted); }
+  textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; resize: vertical; }
+  aside textarea { margin-top: 4px; }
+  .tips { font-size: 13px; color: var(--muted); }
+  .tips p { margin: 0 0 10px; }
+  kbd { font: 12px ui-monospace, monospace; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--bg); }
+
+  /* ----- Vue jour (cellulaire) ----- */
+  .days { display: grid; grid-template-columns: repeat(5, 1fr) repeat(2, .75fr); gap: 4px; margin-bottom: 12px; }
+  .day { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 6px 0; display: flex; flex-direction: column; align-items: center; line-height: 1.2; }
+  .day span { font-size: 11px; color: var(--muted); text-transform: uppercase; }
+  .day b { font-size: 17px; }
+  .day small { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; min-height: 14px; }
+  .day.we { background: var(--we); }
+  .day.we b { color: var(--we-text); }
+  .day.today b { color: var(--accent); }
+  .day.on { background: var(--accent); border-color: var(--accent); }
+  .day.on span, .day.on b, .day.on small { color: #fff; }
+  .dayhead { font-weight: 600; margin: 0 2px 8px; display: flex; justify-content: space-between; align-items: baseline; }
+  .dayhead small { color: var(--muted); font-weight: 400; }
+  .dcard { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+  .dhead { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; position: relative; padding-right: 14px; }
+  .dname { font-weight: 600; font-size: 16px; }
+  .dhead small { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .drow { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .stepbtn { width: 52px; height: 48px; flex: none; border: 1px solid var(--line); background: var(--bg); border-radius: 10px; font-size: 22px; line-height: 1; }
+  .stepbtn:active { background: var(--accent-soft); }
+  .drow input.cell { height: 48px; font-size: 22px; font-weight: 600; border: 1px solid var(--line); border-radius: 10px; }
+  .drow input.cell::placeholder { color: var(--muted); font-weight: 400; }
+  .dnote { font-size: 16px; padding: 8px 10px; min-height: 40px; }
+  .dcard-actions { display: flex; justify-content: space-between; align-items: center; }
+  .sumbar { position: sticky; bottom: 0; margin: 12px -16px -16px; padding: 12px 16px; padding-bottom: max(12px, env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--line); display: flex; justify-content: space-around; text-align: center; font-size: 12px; color: var(--muted); }
+  .sumbar b { display: block; font-size: 18px; color: var(--text); font-variant-numeric: tabular-nums; }
+  .sumbar .grand b { color: var(--accent); }
+
+  /* ----- Mois ----- */
+  #month-table th.wk { cursor: pointer; }
+  #month-table th.wk:hover { color: var(--accent); }
+  #month-table td { height: 42px; }
+  #month-table td.pct { color: var(--muted); font-weight: 400; }
+  .notes { margin-top: 20px; }
+  .notes h3 { font-size: 15px; margin: 0 0 8px; }
+  .notes ul { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+  .notes li { padding: 9px 14px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 90px 140px 50px 1fr; gap: 10px; font-size: 14px; }
+  .notes li:last-child { border-bottom: 0; }
+  .notes .d { color: var(--muted); }
+  .notes .t { font-variant-numeric: tabular-nums; text-align: right; }
+  .notes .empty { display: block; color: var(--muted); }
+
+  .banner { display: flex; align-items: center; gap: 12px; justify-content: space-between; background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; font-size: 14px; }
+  .banner button { flex: none; border: 0; background: var(--accent); color: #fff; border-radius: 6px; padding: 7px 12px; }
+
+  /* ----- Dialogues ----- */
+  dialog { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--text); padding: 20px; width: min(440px, 94vw); max-height: 90vh; overflow-y: auto; box-shadow: 0 10px 40px #0005; }
+  dialog::backdrop { background: #0006; }
+  dialog h2 { margin: 0 0 8px; font-size: 17px; }
+  dialog p { margin: 0 0 14px; color: var(--muted); white-space: pre-line; }
+  dialog input { width: 100%; font: inherit; font-size: 16px; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); margin-bottom: 14px; }
+  dialog .btns { display: flex; flex-direction: row-reverse; gap: 8px; flex-wrap: wrap; }
+  dialog .btns button { border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 9px 14px; }
+  dialog .btns button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  dialog.wide { width: min(600px, 94vw); }
+  .guide { margin: 0 0 16px; padding-left: 22px; }
+  .guide li { margin-bottom: 9px; }
+  .save-box { background: var(--accent-soft); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+  .save-box h3 { margin: 0 0 6px; font-size: 15px; }
+  .save-box p { color: var(--text); margin: 0 0 6px; white-space: normal; }
+  .only-mobile { display: none; }
+
+  #toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 9px 16px; border-radius: 8px; font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 20; max-width: 90vw; text-align: center; }
+  #toast.show { opacity: 1; }
+
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  @media (max-width: 720px) {
+    header { padding: 8px 12px; gap: 8px; }
+    .brand { display: none; }
+    main { padding: 12px 16px 16px; }
+    .period { gap: 6px; flex-wrap: nowrap; }
+    .period h2 { min-width: 0; flex: 1; font-size: 16px; margin: 0; }
+    .period .btn { padding: 8px 12px; }
+    aside, .only-desktop { display: none !important; }
+    .only-mobile { display: block; }
+    .wkcol { display: none; }
+    .notes li { grid-template-columns: 56px 1fr auto; }
+    .notes li .n { grid-column: 1 / -1; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">Feuille de temps</div>
+  <div class="tabs">
+    <button data-view="week" class="on">Semaine</button>
+    <button data-view="month">Mois</button>
+  </div>
+  <div class="spacer"></div>
+  <button id="backup-status" class="status" title="Faire une copie de sécurité"></button>
+  <button id="help" class="help-btn" title="Comment ça marche">?</button>
+  <details class="menu">
+    <summary title="Données">⋯</summary>
+    <div>
+      <button id="do-backup">💾 Faire une copie de sécurité</button>
+      <button id="restore">Restaurer une copie…</button>
+      <button id="export-csv">Exporter pour Excel (CSV)</button>
+    </div>
+  </details>
+</header>
+
+<main>
+  <div id="banner"></div>
+  <section id="week-view">
+    <div class="period">
+      <button class="btn" id="week-prev" title="Semaine précédente">◀</button>
+      <h2 id="week-label"></h2>
+      <button class="btn" id="week-next" title="Semaine suivante">▶</button>
+      <button class="btn only-desktop" id="week-today">Aujourd'hui</button>
+    </div>
+    <div class="layout">
+      <div id="week-body"></div>
+      <aside id="panel"></aside>
+    </div>
+  </section>
+
+  <section id="month-view" hidden>
+    <div class="period">
+      <button class="btn" id="month-prev" title="Mois précédent">◀</button>
+      <h2 id="month-label"></h2>
+      <button class="btn" id="month-next" title="Mois suivant">▶</button>
+      <button class="btn only-desktop" id="month-today">Ce mois-ci</button>
+    </div>
+    <div class="card"><table id="month-table"></table></div>
+    <div class="notes"><h3>Notes du mois</h3><ul id="month-notes"></ul></div>
+  </section>
+</main>
+
+<dialog id="welcome" class="wide"><form method="dialog">
+  <h2>Bienvenue dans la feuille de temps 👋</h2>
+  <p>Voici comment ça marche, en 30 secondes.</p>
+  <ol class="guide only-mobile">
+    <li><b>Choisis le jour</b> dans la bande du haut (Lun, Mar…).</li>
+    <li>Pour chaque département, appuie sur <b>+</b> ou <b>−</b> pour ajouter ou retirer 15 minutes.
+      Tu peux aussi <b>toucher l'heure</b> pour la taper (ex. : 1:15, 1.5, 45m).</li>
+    <li>Une <b>note</b> ? Écris-la dans la case sous l'heure.</li>
+    <li>Les <b>totaux</b> du jour, de la semaine et du mois sont en bas. L'onglet <b>Mois</b> donne le résumé.</li>
+  </ol>
+  <ol class="guide only-desktop">
+    <li><b>Clique sur une case</b> (un département × un jour), puis <b>tape la durée</b> :
+      <kbd>1:15</kbd> <kbd>1h15</kbd> <kbd>1.5</kbd> <kbd>45m</kbd>. C'est arrondi au 15 minutes.</li>
+    <li><b>Flèches <kbd>↑</kbd> <kbd>↓</kbd> ou molette</b> : ajoute ou retire 15 minutes. <kbd>Entrée</kbd> passe à la case du dessous.</li>
+    <li><b>Une note ?</b> Une fois la case choisie, écris-la dans l'encadré de droite. Un coin jaune apparaît sur la case.</li>
+    <li><b>Les totaux</b> se calculent tout seuls. L'onglet <b>Mois</b> donne le résumé du mois.</li>
+  </ol>
+  <div class="save-box">
+    <h3>💾 Où sont mes données ?</h3>
+    <p>Tout est <b>enregistré automatiquement sur cet appareil</b>, rien à faire.</p>
+    <p>Par sécurité, appuie sur <b>💾</b> en haut environ <b>une fois par semaine</b> : ça crée une copie que tu peux t'envoyer par courriel ou garder dans Drive / Fichiers.
+      Pour la récupérer : menu <b>⋯ → Restaurer une copie</b>.</p>
+  </div>
+  <div class="save-box only-mobile">
+    <h3>📱 Conseil : ajoute-la à l'écran d'accueil</h3>
+    <p><b>iPhone</b> : bouton Partager → « Sur l'écran d'accueil ».<br>
+      <b>Android</b> : menu ⋮ → « Ajouter à l'écran d'accueil ».<br>
+      Elle s'ouvrira comme une vraie app et tes données seront mieux protégées.</p>
+  </div>
+  <div class="btns"><button value="ok" class="primary">C'est parti !</button></div>
+</form></dialog>
+
+<dialog id="dlg"><form method="dialog"><h2></h2><p></p><input hidden autocomplete="off"><div class="btns"></div></form></dialog>
+<input type="file" id="import-file" accept=".json,application/json,text/plain" hidden>
+<div id="toast"></div>
+
+<script>
+const KEY = 'timesheet-techlabo';
+const DAYS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+const DAYS_LONG = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
+const MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+const BACKUP_EVERY_DAYS = 7;
+const $ = s => document.querySelector(s);
+const mobile = matchMedia('(max-width: 720px)');
+const touch = matchMedia('(pointer: coarse)');
+
+// ---------- Dates & format ----------
+const pad = n => String(n).padStart(2, '0');
+const ymd = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const parseYmd = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+const addDays = (d, n) => { const r = new Date(d); r.setDate(r.getDate() + n); return r; };
+const dow = d => (d.getDay() + 6) % 7; // 0 = lundi
+const mondayOf = d => addDays(new Date(d.getFullYear(), d.getMonth(), d.getDate()), -dow(d));
+function isoWeek(d) {
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
+  return Math.ceil(((t - Date.UTC(t.getUTCFullYear(), 0, 1)) / 864e5 + 1) / 7);
+}
+const fmt = min => min ? `${Math.floor(min / 60)}:${pad(min % 60)}` : '';
+const fmtTot = min => min ? fmt(min) : '–';
+const dec = min => (min / 60).toLocaleString('fr-CA', { maximumFractionDigits: 2 }) + ' h';
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// Accepte : 1:15, 1h15, 1h, 45m, 1.25, 1,5, 2 (heures), 75 (minutes si > 24). Arrondi au 15 min.
+function parseTime(s) {
+  s = s.trim().toLowerCase().replace(',', '.').replace(/\s+/g, '');
+  if (!s) return 0;
+  let m, min = null;
+  if ((m = s.match(/^(\d+)h(\d+)?(m|min)?$/))) min = +m[1] * 60 + (+m[2] || 0);
+  else if ((m = s.match(/^(\d+)(m|min)$/))) min = +m[1];
+  else if ((m = s.match(/^(\d+):(\d{1,2})$/))) min = +m[1] * 60 + +m[2];
+  else if ((m = s.match(/^(\d*\.\d+|\d+)h?$/))) {
+    const n = parseFloat(m[1]);
+    min = (m[1].includes('.') || s.endsWith('h') || n <= 24) ? n * 60 : n;
+  }
+  if (min == null || isNaN(min)) return null;
+  return Math.min(Math.round(min / 15) * 15, 24 * 60);
+}
+
+// ---------- État ----------
+const defaultState = () => ({
+  version: 1,
+  departments: [
+    { id: 'medecine', name: 'Médecine' },
+    { id: 'charpenterie', name: 'Charpenterie' },
+    { id: 'esthetique', name: 'Esthétique' },
+  ],
+  entries: {}, // { "2026-11-02": { medecine: { min: 75, note: "" } } }
+  savedAt: null,
+});
+const isValid = d => d && Array.isArray(d.departments) && d.entries && typeof d.entries === 'object';
+function loadLocal() {
+  try { const d = JSON.parse(localStorage.getItem(KEY)); if (isValid(d)) return d; } catch {}
+  return defaultState();
+}
+const hasData = d => Object.keys(d.entries).length > 0;
+const store = {
+  get: k => { try { return localStorage.getItem(KEY + '-' + k); } catch { return null; } },
+  set: (k, v) => { try { localStorage.setItem(KEY + '-' + k, v); } catch {} },
+};
+
+let state = loadLocal();
+let weekStart = mondayOf(new Date());
+let selDay = ymd(new Date());
+let monthCursor = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+let sel = null; // case sélectionnée (ordinateur) : { date, dept }
+
+const getE = (date, dept) => state.entries[date]?.[dept];
+const getMin = (date, dept) => getE(date, dept)?.min || 0;
+const dayTotal = date => Object.values(state.entries[date] || {}).reduce((s, e) => s + e.min, 0);
+const deptName = id => state.departments.find(d => d.id === id)?.name ?? id;
+
+function setE(date, dept, patch) {
+  const day = state.entries[date] || (state.entries[date] = {});
+  const e = { min: 0, note: '', ...day[dept], ...patch };
+  if (!e.min && !e.note.trim()) delete day[dept]; else day[dept] = e;
+  if (!Object.keys(day).length) delete state.entries[date];
+  persist();
+}
+
+function deptHasData(id, dates) {
+  return (dates || Object.keys(state.entries)).some(dt => getE(dt, id));
+}
+const visibleDepts = dates => state.departments.filter(d => !d.archived || deptHasData(d.id, dates));
+
+function persist() {
+  state.savedAt = new Date().toISOString();
+  try { localStorage.setItem(KEY, JSON.stringify(state)); }
+  catch { toast('⚠ Impossible d\'enregistrer sur cet appareil.'); }
+  renderBackupStatus();
+}
+
+// ---------- Vue semaine ----------
+const weekDates = () => [...Array(7)].map((_, i) => ymd(addDays(weekStart, i)));
+const cellInput = (date, dept) => document.querySelector(`input.cell[data-date="${date}"][data-dept="${dept}"]`);
+
+function renderWeek() {
+  const end = addDays(weekStart, 6);
+  const range = weekStart.getMonth() === end.getMonth()
+    ? `${weekStart.getDate()} – ${end.getDate()} ${MONTHS[end.getMonth()]} ${end.getFullYear()}`
+    : `${weekStart.getDate()} ${MONTHS[weekStart.getMonth()]} – ${end.getDate()} ${MONTHS[end.getMonth()]} ${end.getFullYear()}`;
+  $('#week-label').innerHTML = `Semaine ${isoWeek(weekStart)}<small>${range}</small>`;
+  if (!weekDates().includes(selDay)) selDay = weekDates().includes(ymd(new Date())) ? ymd(new Date()) : ymd(weekStart);
+  mobile.matches ? renderDayView() : renderGrid();
+  updateTotals();
+}
+
+function renderGrid() {
+  const dates = weekDates(), today = ymd(new Date());
+  let h = '<thead><tr><th class="dept-h">Département</th>';
+  dates.forEach((d, i) => {
+    h += `<th class="${i > 4 ? 'we' : ''} ${d === today ? 'today' : ''}">${DAYS[i]}<span>${parseYmd(d).getDate()}</span></th>`;
+  });
+  h += '<th class="tot">Total</th></tr></thead><tbody>';
+  for (const dp of visibleDepts(dates)) {
+    h += `<tr data-dept="${dp.id}" class="${dp.archived ? 'archived' : ''}"><th class="dept"><span class="name">${esc(dp.name)}</span>`
+      + `<span class="acts"><button data-act="rename" title="Renommer">✎</button><button data-act="remove" title="Retirer">×</button></span></th>`;
+    dates.forEach((d, i) => {
+      const e = getE(d, dp.id);
+      h += `<td class="${i > 4 ? 'we' : ''} ${e?.note ? 'has-note' : ''}"><input class="cell" data-date="${d}" data-dept="${dp.id}" `
+        + `value="${fmt(e?.min)}" placeholder="·" autocomplete="off" aria-label="${esc(dp.name)} ${DAYS_LONG[i]} ${d}"></td>`;
+    });
+    h += `<td class="tot" data-rowtot="${dp.id}"></td></tr>`;
+  }
+  h += '</tbody><tfoot><tr><th>Total</th>';
+  dates.forEach((d, i) => { h += `<td class="tot ${i > 4 ? 'we' : ''}" data-daytot="${d}"></td>`; });
+  h += '<td class="tot grand" data-weektot></td></tr></tfoot>';
+  $('#week-body').innerHTML = `<div class="card"><table>${h}</table></div>
+    <div class="below"><button class="link" data-act="add">+ Ajouter un département</button><span>Total du mois : <b data-monthtot></b></span></div>`;
+  renderPanel();
+}
+
+function renderDayView() {
+  const dates = weekDates(), today = ymd(new Date());
+  const d = parseYmd(selDay);
+  let h = '<div class="days">';
+  dates.forEach((dt, i) => {
+    h += `<button class="day ${i > 4 ? 'we' : ''} ${dt === today ? 'today' : ''} ${dt === selDay ? 'on' : ''}" data-day="${dt}">`
+      + `<span>${DAYS[i]}</span><b>${parseYmd(dt).getDate()}</b><small data-daytot="${dt}"></small></button>`;
+  });
+  h += `</div><div class="dayhead">${DAYS_LONG[dow(d)][0].toUpperCase() + DAYS_LONG[dow(d)].slice(1)} ${d.getDate()} ${MONTHS[d.getMonth()]}`
+    + `${selDay === today ? " <small>aujourd'hui</small>" : ''}</div>`;
+  for (const dp of visibleDepts(dates)) {
+    const e = getE(selDay, dp.id);
+    h += `<div class="dcard ${dp.archived ? 'archived' : ''} ${e?.note ? 'has-note' : ''}" data-dept="${dp.id}">
+      <div class="dhead"><span class="dname">${esc(dp.name)}</span><small>Semaine : <span data-rowtot="${dp.id}"></span></small></div>
+      <div class="drow">
+        <button class="stepbtn" data-step="-15" aria-label="Retirer 15 minutes">−</button>
+        <input class="cell" data-date="${selDay}" data-dept="${dp.id}" value="${fmt(e?.min)}" placeholder="0:00" autocomplete="off" aria-label="Heures ${esc(dp.name)}">
+        <button class="stepbtn" data-step="15" aria-label="Ajouter 15 minutes">+</button>
+      </div>
+      <textarea class="dnote" rows="1" placeholder="Note (optionnel)" data-date="${selDay}" data-dept="${dp.id}">${esc(e?.note || '')}</textarea>
+    </div>`;
+  }
+  h += `<div class="dcard-actions"><button class="link" data-act="add">+ Département</button><button class="link" data-act="manage">Modifier les départements</button></div>
+    <div class="sumbar"><div>Jour<b data-daytot="${selDay}"></b></div><div class="grand">Semaine<b data-weektot></b></div><div>Mois<b data-monthtot></b></div></div>`;
+  $('#week-body').innerHTML = h;
+}
+
+function updateTotals() {
+  const dates = weekDates();
+  document.querySelectorAll('[data-rowtot]').forEach(el => {
+    const t = dates.reduce((s, d) => s + getMin(d, el.dataset.rowtot), 0);
+    el.textContent = fmtTot(t); el.title = dec(t);
+  });
+  document.querySelectorAll('[data-daytot]').forEach(el => {
+    const t = dayTotal(el.dataset.daytot);
+    el.textContent = el.closest('.day') ? fmt(t) : fmtTot(t); el.title = dec(t);
+  });
+  const wt = dates.reduce((s, d) => s + dayTotal(d), 0);
+  document.querySelectorAll('[data-weektot]').forEach(el => { el.textContent = fmtTot(wt); el.title = dec(wt); });
+  const ref = mobile.matches ? parseYmd(selDay) : addDays(weekStart, 3);
+  const mt = monthTotal(ref.getFullYear(), ref.getMonth());
+  document.querySelectorAll('[data-monthtot]').forEach(el => { el.textContent = fmtTot(mt); el.title = `${MONTHS[ref.getMonth()]} · ${dec(mt)}`; });
+}
+
+function monthTotal(y, m) {
+  const prefix = `${y}-${pad(m + 1)}-`;
+  let t = 0;
+  for (const d of Object.keys(state.entries)) if (d.startsWith(prefix)) t += dayTotal(d);
+  return t;
+}
+
+function setCellMin(input, min) {
+  const { date, dept } = input.dataset;
+  min = Math.max(0, Math.min(min, 24 * 60));
+  if (min !== getMin(date, dept)) setE(date, dept, { min });
+  input.value = fmt(min);
+  updateTotals();
+  if (sel && sel.date === date && sel.dept === dept && $('#p-time')) $('#p-time').textContent = fmt(min) || '0:00';
+}
+
+function commit(input) {
+  const v = parseTime(input.value);
+  if (v === null) {
+    input.classList.add('bad');
+    setTimeout(() => input.classList.remove('bad'), 900);
+    toast('Format non reconnu. Ex. : 1:15, 1h15, 1.25, 45m');
+    input.value = fmt(getMin(input.dataset.date, input.dataset.dept));
+    return;
+  }
+  setCellMin(input, v);
+}
+
+function step(input, delta) {
+  const typed = parseTime(input.value);
+  setCellMin(input, (typed === null ? getMin(input.dataset.date, input.dataset.dept) : typed) + delta);
+}
+
+function moveFocus(input, dRow, dCol) {
+  if (mobile.matches) return input.blur();
+  const inputs = [...document.querySelectorAll('input.cell')];
+  const idx = inputs.indexOf(input), row = Math.floor(idx / 7), col = idx % 7;
+  const target = col + dCol >= 0 && col + dCol < 7 ? inputs[(row + dRow) * 7 + col + dCol] : null;
+  if (target) target.focus(); else if (dRow) input.blur();
+}
+
+const wb = $('#week-body');
+wb.addEventListener('focusin', e => {
+  const inp = e.target.closest('input.cell');
+  if (!inp) return;
+  inp.select();
+  if (!mobile.matches) { sel = { date: inp.dataset.date, dept: inp.dataset.dept }; renderPanel(); }
+});
+wb.addEventListener('keydown', e => {
+  const inp = e.target.closest('input.cell');
+  if (!inp) return;
+  const k = e.key;
+  if (k === 'ArrowUp' || k === 'ArrowDown') { e.preventDefault(); step(inp, (k === 'ArrowUp' ? 15 : -15) * (e.shiftKey ? 4 : 1)); inp.select(); }
+  else if (k === 'Enter') { e.preventDefault(); commit(inp); moveFocus(inp, e.shiftKey ? -1 : 1, 0); }
+  else if ((k === 'ArrowLeft' || k === 'ArrowRight') && !mobile.matches) { e.preventDefault(); commit(inp); moveFocus(inp, 0, k === 'ArrowLeft' ? -1 : 1); }
+  else if (k === 'Escape') { inp.value = fmt(getMin(inp.dataset.date, inp.dataset.dept)); inp.blur(); }
+});
+wb.addEventListener('change', e => { if (e.target.matches('input.cell')) commit(e.target); });
+wb.addEventListener('wheel', e => {
+  const inp = e.target.closest('input.cell');
+  if (!inp || document.activeElement !== inp) return;
+  e.preventDefault();
+  step(inp, e.deltaY < 0 ? 15 : -15);
+  inp.select();
+}, { passive: false });
+wb.addEventListener('input', e => {
+  if (!e.target.matches('.dnote')) return;
+  const { date, dept } = e.target.dataset;
+  setE(date, dept, { note: e.target.value });
+  e.target.closest('.dcard').classList.toggle('has-note', !!e.target.value.trim());
+});
+wb.addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (b.dataset.day) { selDay = b.dataset.day; renderWeek(); return; }
+  if (b.dataset.step) { step(b.closest('.dcard').querySelector('input.cell'), +b.dataset.step); return; }
+  const act = b.dataset.act, id = b.closest('[data-dept]')?.dataset.dept;
+  if (act === 'add') addDept();
+  else if (act === 'manage') manageDepts();
+  else if (act === 'rename') renameDept(id);
+  else if (act === 'remove') removeDept(id);
+});
+
+// ---------- Panneau de détail (ordinateur) ----------
+function renderPanel() {
+  const p = $('#panel');
+  const inp = sel && cellInput(sel.date, sel.dept);
+  if (!inp) {
+    sel = null;
+    p.innerHTML = `<h3>Saisie</h3><div class="tips">
+      <p>Clique une case, puis tape une durée : <kbd>1:15</kbd> <kbd>1h15</kbd> <kbd>1.25</kbd> <kbd>45m</kbd>. Arrondi au 15 min.</p>
+      <p><kbd>↑</kbd> <kbd>↓</kbd> ou la molette : ±15 min<br><kbd>Shift</kbd> + <kbd>↑</kbd> <kbd>↓</kbd> : ±1 h</p>
+      <p><kbd>Entrée</kbd> : case du dessous<br><kbd>←</kbd> <kbd>→</kbd> : jour précédent / suivant</p>
+      <p>Un coin jaune indique une note.</p></div>`;
+    return;
+  }
+  const d = parseYmd(sel.date), e = getE(sel.date, sel.dept);
+  p.innerHTML = `<h3>${esc(deptName(sel.dept))}</h3>
+    <div class="sub">${DAYS_LONG[dow(d)]} ${d.getDate()} ${MONTHS[d.getMonth()]}</div>
+    <div class="stepper">
+      <button data-step="-60">−1h</button><button data-step="-15">−15</button>
+      <output id="p-time">${fmt(e?.min) || '0:00'}</output>
+      <button data-step="15">+15</button><button data-step="60">+1h</button>
+    </div>
+    <label>Note<textarea id="p-note" rows="4" placeholder="Ex. : réunion, inventaire…">${esc(e?.note || '')}</textarea></label>`;
+}
+$('#panel').addEventListener('mousedown', e => { if (e.target.closest('[data-step]')) e.preventDefault(); });
+$('#panel').addEventListener('click', e => {
+  const b = e.target.closest('[data-step]');
+  if (b && sel) step(cellInput(sel.date, sel.dept), +b.dataset.step);
+});
+$('#panel').addEventListener('input', e => {
+  if (e.target.id !== 'p-note' || !sel) return;
+  setE(sel.date, sel.dept, { note: e.target.value });
+  cellInput(sel.date, sel.dept)?.parentElement.classList.toggle('has-note', !!e.target.value.trim());
+});
+
+// ---------- Départements ----------
+async function addDept() {
+  const name = (await promptText('Nouveau département', 'Nom du département', ''))?.trim();
+  if (!name) return;
+  const same = state.departments.find(d => d.name.toLowerCase() === name.toLowerCase());
+  if (same && !same.archived) return toast('Ce département existe déjà.');
+  if (same) same.archived = false;
+  else state.departments.push({ id: 'd' + Date.now().toString(36), name });
+  persist(); render();
+}
+async function renameDept(id) {
+  const dp = state.departments.find(d => d.id === id);
+  const name = (await promptText('Renommer', 'Nouveau nom', dp.name))?.trim();
+  if (!name || name === dp.name) return;
+  dp.name = name;
+  persist(); render();
+}
+async function removeDept(id) {
+  const dp = state.departments.find(d => d.id === id);
+  const used = deptHasData(id);
+  const ok = await choose(`Retirer « ${dp.name} » ?`,
+    used ? 'Les heures déjà saisies sont conservées et restent visibles dans les semaines et mois concernés.\nPour le remettre, ajoute un département du même nom.'
+         : 'Aucune heure n\'a été saisie pour ce département.',
+    [{ label: 'Retirer', value: 'yes', primary: true }, { label: 'Annuler', value: '' }]);
+  if (ok !== 'yes') return;
+  if (used) dp.archived = true; else state.departments = state.departments.filter(d => d.id !== id);
+  persist(); render();
+}
+async function manageDepts() {
+  const active = state.departments.filter(d => !d.archived);
+  const id = await choose('Modifier les départements', 'Choisis le département à modifier.',
+    [...active.map(d => ({ label: d.name, value: d.id })), { label: 'Fermer', value: '' }].reverse());
+  if (!id) return;
+  const act = await choose(deptName(id), '', [{ label: 'Renommer', value: 'rename', primary: true }, { label: 'Retirer', value: 'remove' }, { label: 'Annuler', value: '' }]);
+  if (act === 'rename') renameDept(id); else if (act === 'remove') removeDept(id);
+}
+
+// ---------- Vue mois ----------
+function renderMonth() {
+  const y = monthCursor.getFullYear(), m = monthCursor.getMonth();
+  $('#month-label').textContent = `${MONTHS[m][0].toUpperCase() + MONTHS[m].slice(1)} ${y}`;
+  const days = [];
+  for (let d = new Date(y, m, 1); d.getMonth() === m; d = addDays(d, 1)) days.push(d);
+  const weeks = [];
+  for (const d of days) {
+    const ws = ymd(mondayOf(d));
+    let w = weeks.find(x => x.start === ws);
+    if (!w) weeks.push(w = { start: ws, num: isoWeek(d), dates: [] });
+    w.dates.push(ymd(d));
+  }
+  const allDates = days.map(ymd);
+  const total = monthTotal(y, m);
+
+  let h = '<thead><tr><th class="dept-h">Département</th>';
+  for (const w of weeks) {
+    const a = parseYmd(w.dates[0]).getDate(), b = parseYmd(w.dates.at(-1)).getDate();
+    h += `<th class="wk wkcol" data-week="${w.start}" title="Voir la semaine">S${w.num}<span>${a === b ? a : `${a}–${b}`}</span></th>`;
+  }
+  h += '<th class="tot">Total</th><th class="tot">%</th></tr></thead><tbody>';
+  for (const dp of visibleDepts(allDates)) {
+    h += `<tr class="${dp.archived ? 'archived' : ''}"><th class="dept"><span class="name">${esc(dp.name)}</span></th>`;
+    let t = 0;
+    for (const w of weeks) {
+      const s = w.dates.reduce((acc, d) => acc + getMin(d, dp.id), 0);
+      t += s;
+      h += `<td class="wkcol" title="${dec(s)}">${fmtTot(s)}</td>`;
+    }
+    h += `<td class="tot" title="${dec(t)}">${fmtTot(t)}</td><td class="tot pct">${total ? Math.round(t / total * 100) + ' %' : '–'}</td></tr>`;
+  }
+  h += '</tbody><tfoot><tr><th>Total</th>';
+  for (const w of weeks) {
+    const s = w.dates.reduce((acc, d) => acc + dayTotal(d), 0);
+    h += `<td class="tot wkcol" title="${dec(s)}">${fmtTot(s)}</td>`;
+  }
+  h += `<td class="tot grand" title="${dec(total)}">${fmtTot(total)}</td><td class="tot"></td></tr></tfoot>`;
+  $('#month-table').innerHTML = h;
+
+  const notes = [];
+  for (const d of allDates)
+    for (const [dept, e] of Object.entries(state.entries[d] || {}))
+      if (e.note?.trim()) notes.push({ d, dept, e });
+  $('#month-notes').innerHTML = notes.length
+    ? notes.map(({ d, dept, e }) => { const dd = parseYmd(d);
+        return `<li><span class="d">${DAYS[dow(dd)]} ${dd.getDate()}</span><b>${esc(deptName(dept))}</b><span class="t">${fmt(e.min)}</span><span class="n">${esc(e.note)}</span></li>`; }).join('')
+    : '<li class="empty">Aucune note ce mois-ci.</li>';
+}
+$('#month-table').addEventListener('click', e => {
+  const th = e.target.closest('[data-week]');
+  if (!th) return;
+  weekStart = parseYmd(th.dataset.week);
+  setView('week');
+});
+
+// ---------- Navigation ----------
+let view = 'week';
+function setView(v) {
+  view = v;
+  document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.view === v));
+  $('#week-view').hidden = v !== 'week';
+  $('#month-view').hidden = v !== 'month';
+  if (v === 'month') {
+    const ref = mobile.matches ? parseYmd(selDay) : addDays(weekStart, 3);
+    monthCursor = new Date(ref.getFullYear(), ref.getMonth(), 1);
+  }
+  render();
+}
+function render() { view === 'week' ? renderWeek() : renderMonth(); renderBackupStatus(); }
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => setView(b.dataset.view));
+$('#week-prev').onclick = () => { weekStart = addDays(weekStart, -7); renderWeek(); };
+$('#week-next').onclick = () => { weekStart = addDays(weekStart, 7); renderWeek(); };
+$('#week-today').onclick = () => { weekStart = mondayOf(new Date()); selDay = ymd(new Date()); renderWeek(); };
+$('#month-prev').onclick = () => { monthCursor = new Date(monthCursor.getFullYear(), monthCursor.getMonth() - 1, 1); renderMonth(); };
+$('#month-next').onclick = () => { monthCursor = new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 1); renderMonth(); };
+$('#month-today').onclick = () => { const n = new Date(); monthCursor = new Date(n.getFullYear(), n.getMonth(), 1); renderMonth(); };
+mobile.addEventListener('change', () => { sel = null; render(); });
+
+// ---------- Dialogues & toast ----------
+function openDialog(title, text, buttons, input) {
+  const dlg = $('#dlg'), inp = dlg.querySelector('input');
+  dlg.querySelector('h2').textContent = title;
+  dlg.querySelector('p').textContent = text || '';
+  dlg.querySelector('p').hidden = !text;
+  inp.hidden = input == null;
+  inp.value = input ?? '';
+  dlg.querySelector('.btns').innerHTML = buttons.map(b =>
+    `<button value="${esc(b.value)}" class="${b.primary ? 'primary' : ''}">${esc(b.label)}</button>`).join('');
+  return new Promise(res => {
+    dlg.onclose = () => res(dlg.returnValue);
+    dlg.returnValue = '';
+    dlg.showModal();
+    if (input != null) { inp.focus(); inp.select(); }
+  });
+}
+const choose = (title, text, buttons) => openDialog(title, text, buttons);
+async function promptText(title, label, initial) {
+  const r = await openDialog(title, label, [{ label: 'OK', value: 'ok', primary: true }, { label: 'Annuler', value: 'cancel' }], initial);
+  return r === 'ok' ? $('#dlg input').value : null;
+}
+let toastTimer;
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+}
+$('#help').onclick = () => $('#welcome').showModal();
+$('#welcome').addEventListener('close', () => store.set('guide-vu', '1'));
+
+// ---------- Copie de sécurité / restauration ----------
+const closeMenu = () => $('.menu').removeAttribute('open');
+document.addEventListener('click', e => { if (!e.target.closest('.menu')) closeMenu(); });
+
+function download(name, text, type) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type }));
+  a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+async function backup() {
+  closeMenu();
+  const name = `feuille-de-temps-${ymd(new Date())}.json`;
+  const json = JSON.stringify(state, null, 2);
+  const file = new File([json], name, { type: 'application/json' });
+  // Sur cellulaire : menu Partager (courriel, Drive, Fichiers…). Sinon : téléchargement.
+  if (touch.matches && navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: 'Copie feuille de temps' }); }
+    catch (err) { if (err.name === 'AbortError') return; download(name, json, 'application/json'); }
+  } else download(name, json, 'application/json');
+  store.set('backup', new Date().toISOString());
+  renderBackupStatus();
+  toast('Copie créée : ' + name);
+}
+
+function daysSinceBackup() {
+  const b = store.get('backup');
+  return b ? Math.floor((Date.now() - new Date(b)) / 864e5) : null;
+}
+function renderBackupStatus() {
+  const s = $('#backup-status'), n = daysSinceBackup();
+  const late = hasData(state) && (n === null || n >= BACKUP_EVERY_DAYS);
+  s.className = 'status ' + (late ? 'warn' : 'ok');
+  s.textContent = n === null ? '💾 Copie' : `💾 ${n === 0 ? "aujourd'hui" : `il y a ${n} j`}`;
+  $('#banner').innerHTML = late
+    ? `<div class="banner"><span>${n === null ? 'Aucune copie de sécurité encore.' : `Dernière copie il y a ${n} jours.`} Fais-en une pour ne rien perdre.</span><button data-backup>💾 Copier</button></div>`
+    : '';
+}
+$('#banner').addEventListener('click', e => { if (e.target.closest('[data-backup]')) backup(); });
+$('#backup-status').onclick = backup;
+$('#do-backup').onclick = backup;
+
+$('#restore').onclick = () => { closeMenu(); $('#import-file').click(); };
+$('#import-file').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  let data;
+  try { data = JSON.parse(await f.text()); } catch { data = null; }
+  if (!isValid(data)) return toast('Ce fichier ne contient pas de données valides.');
+  const when = data.savedAt ? new Date(data.savedAt).toLocaleString('fr-CA', { dateStyle: 'medium', timeStyle: 'short' }) : '?';
+  const ok = await choose('Restaurer cette copie ?',
+    `Les données actuelles de cet appareil seront remplacées par la copie « ${f.name} » (dernière modification : ${when}).`,
+    [{ label: 'Restaurer', value: 'yes', primary: true }, { label: 'Annuler', value: '' }]);
+  if (ok !== 'yes') return;
+  store.set('avant-restauration', JSON.stringify(state));
+  state = { ...defaultState(), ...data };
+  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {}
+  sel = null;
+  render();
+  toast('Copie restaurée.');
+};
+
+$('#export-csv').onclick = () => {
+  closeMenu();
+  const q = s => `"${String(s).replace(/"/g, '""')}"`;
+  const rows = [['Date', 'Jour', 'Semaine', 'Département', 'Durée', 'Heures', 'Note'].join(';')];
+  for (const d of Object.keys(state.entries).sort())
+    for (const [dept, e] of Object.entries(state.entries[d])) {
+      const dd = parseYmd(d);
+      rows.push([d, DAYS_LONG[dow(dd)], isoWeek(dd), q(deptName(dept)), fmt(e.min) || '0:00',
+        (e.min / 60).toString().replace('.', ','), q(e.note || '')].join(';'));
+    }
+  download(`feuille-de-temps-${ymd(new Date())}.csv`, '﻿' + rows.join('\r\n'), 'text/csv');
+};
+
+// Demande au navigateur de ne pas effacer les données de cette page.
+navigator.storage?.persist?.().catch(() => {});
+
+render();
+if (!store.get('guide-vu')) $('#welcome').showModal();
+</script>
+</body>
+</html>
